@@ -1,18 +1,19 @@
 "use strict";
 
 const form = document.querySelector(".form");
-const containerWorkouts = document.querySelector(".workouts");
 const inputType = document.querySelector(".form__input--type");
 const inputDistance = document.querySelector(".form__input--distance");
 const inputDuration = document.querySelector(".form__input--duration");
 const inputTemp = document.querySelector(".form__input--temp");
 const inputClimb = document.querySelector(".form__input--climb");
+const clearListButton = document.querySelector(".clear-list-button");
 
 const date = new Date();
+const currentDate = new Intl.DateTimeFormat('ru-Ru').format(date);
 
 class Workout {
     #date = date;
-    #id = `${date.getSeconds()}/${date.getMinutes()}/${date.getDay()}/${date.getMonth()}`;
+    id = `${new Date().getSeconds()}${date.getMinutes()}`;
 
     constructor(coords, distance, duration) {
         this.coords = coords;
@@ -50,8 +51,10 @@ class App {
 
     constructor() {
         this._getPosition();
+        this._getLocalStorageData();
         form.addEventListener('submit', this._newWorkout.bind(this));
         inputType.addEventListener('change', this._toggleClimbField);
+        clearListButton.addEventListener('click', this.reset);
     }
 
     _getPosition() {
@@ -72,6 +75,9 @@ class App {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(this.#map);
         this.#map.on('click', this._showForm.bind(this));
+        this.#workouts.forEach(workout => {
+            this._displayWorkoutOnMap(workout);
+        });
     }
 
     _showForm(e) {
@@ -92,28 +98,14 @@ class App {
         inputTemp.closest('.form__row').classList.toggle('form__row--hidden');
     }
 
-    _displayWorkout(workout) {
-        const { lat, lng } = this.#mapEvent.latlng;
-        const currentDate = `${String(date.getDate()).padStart(2, '0')}/${date.getMonth() + 1}/${date.getFullYear()}`;
+    _closeWorkout(workout) {
 
-        L.marker([lat, lng])
-            .addTo(this.#map)
-            .bindPopup(
-                L.popup({
-                    maxWidth: 200,
-                    minWidth: 100,
-                    autoClose: false,
-                    closeOnClick: false,
-                    className: workout.type === 'running' ? 'running-popup' : 'cycling-popup',
-                })
-            )
-            .setPopupContent(
-                `${workout.type === 'running' ? "Пробежка" : "Велотренировка"} ${currentDate}`
-            )
-            .openPopup();
+    }
 
-        containerWorkouts.insertAdjacentHTML('beforeend',
-            `<li class="workout workout--${workout.type}" data-id="0000000">
+    _displayWorkoutOnSidebar(workout) {
+        form.insertAdjacentHTML('afterend',
+            `<li class="workout workout--${workout.type}" data-id="${workout.id}">
+            <button class="close-workout-button"></button>
             <h2 class="workout__title">${workout.type === "running" ? "Пробежка" : "Велотренировка"} ${currentDate}</h2>
             <div class="workout__details">
             <span class="workout__icon">${workout.type === "running" ? "🏃" : "🚵‍♂️"}</span>
@@ -137,6 +129,53 @@ class App {
             </div>
         </li>`
         );
+        const workouts = document.querySelectorAll(".workout");
+        workouts.forEach(workout => {
+            workout.addEventListener('click', this._setMapView.bind(this))
+        })
+        clearListButton.disabled = false;
+        document.querySelector('.close-workout-button').addEventListener('click',);
+    }
+
+    _displayWorkoutOnMap(workout) {
+        const { lat, lng } = workout.coords;
+
+        L.marker([lat, lng])
+            .addTo(this.#map)
+            .bindPopup(
+                L.popup({
+                    maxWidth: 200,
+                    minWidth: 100,
+                    autoClose: false,
+                    closeOnClick: false,
+                    className: workout.type === 'running' ? 'running-popup' : 'cycling-popup',
+                })
+            )
+            .setPopupContent(
+                `${workout.type === 'running' ? "🏃 Пробежка" : "🚵‍♂️ Велотренировка"} ${currentDate}`
+            )
+            .openPopup();
+    }
+
+    _setMapView(e) {
+        const currentWorkoutId = e.target.closest('.workout').dataset.id;
+        const currentWorkout = this.#workouts.find(workout => workout.id === currentWorkoutId);
+        const { lat, lng } = currentWorkout.coords;
+        this.#map.setView([lat, lng], 13);
+    }
+
+    _addWorkoutsToLocalStorage() {
+        localStorage.setItem('workout', JSON.stringify(this.#workouts));
+    }
+
+    _getLocalStorageData() {
+        const data = JSON.parse(localStorage.getItem('workout'));
+
+        if (!data) return;
+        this.#workouts = data;
+        this.#workouts.forEach(workout => {
+            this._displayWorkoutOnSidebar(workout);
+        });
     }
 
     _newWorkout(e) {
@@ -170,9 +209,18 @@ class App {
         workout.type = type;
         this.#workouts.push(workout);
 
-        this._displayWorkout(workout);
+        this._displayWorkoutOnSidebar(workout);
+        this._displayWorkoutOnMap(workout);
 
         this._hideForm();
+
+        this._addWorkoutsToLocalStorage();
+    }
+
+    reset() {
+        localStorage.removeItem('workout');
+        location.reload();
+        clearListButton.disabled = true;
     }
 }
 
